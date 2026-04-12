@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StepType {
+  action
+  approval
+  notification
+}
+
+enum ExecutionStatus {
+  pending
+  in_progress
+  completed
+  failed
+}
+
+model Workflow {
+  id            String      @id @default(uuid()) @db.Uuid
+  tenant_id     String      @db.Uuid
+  name          String      @db.VarChar(255)
+  trigger_event String      @db.VarChar(255)
+  is_active     Boolean     @default(true)
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
+
+  steps      Step[]
+  executions Execution[]
+
+  @@index([tenant_id])
+  @@index([tenant_id, trigger_event])
+  @@index([tenant_id, is_active])
+}
+
+model Step {
+  id          String   @id @default(uuid()) @db.Uuid
+  workflow_id String   @db.Uuid
+  name        String   @db.VarChar(255)
+  step_type   StepType
+  step_order  Int      @default(0)
+  metadata    Json?    @default("{}")
+
+  workflow Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+  rules    Rule[]   @relation("StepRules")
+
+  referenced_by_rules Rule[] @relation("NextStepRules")
+
+  @@index([workflow_id])
+  @@index([workflow_id, step_order])
+}
+
+model Rule {
+  id           String  @id @default(uuid()) @db.Uuid
+  step_id      String  @db.Uuid
+  field        String  @db.VarChar(255)
+  operator     String  @db.VarChar(50)
+  value        String  @db.VarChar(500)
+  condition    String  @db.Text
+  next_step_id String? @db.Uuid
+  priority     Int     @default(0)
+
+  step      Step  @relation("StepRules", fields: [step_id], references: [id], onDelete: Cascade)
+  next_step Step? @relation("NextStepRules", fields: [next_step_id], references: [id], onDelete: SetNull)
+
+  @@index([step_id])
+  @@index([step_id, priority])
+}
+
+model Execution {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenant_id   String          @db.Uuid
+  workflow_id String          @db.Uuid
+  status      ExecutionStatus @default(pending)
+  trigger_data Json?
+  logs        Json            @default("[]")
+  created_at  DateTime        @default(now())
+  completed_at DateTime?
+
+  workflow Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([workflow_id])
+  @@index([tenant_id, created_at(sort: Desc)])
+}
