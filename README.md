@@ -201,4 +201,4 @@ docker-compose up -d
 
 ---
 
-Developed with ❤️ for high-performance e-commerce.
+
